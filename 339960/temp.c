@@ -17,9 +17,9 @@ typedef struct batcher
 
 
 typedef struct blocked_thread {
-    sem_t sem;              // Semaphore for signaling
+    sem_t sem;                       // Semaphore for signaling
     struct blocked_thread* next;     // Pointer to the next node
-    int id;                 // Identifier for the thread
+    int id;                          // Identifier for the thread
 } blocked_thread;
 
 
