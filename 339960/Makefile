@@ -49,14 +49,14 @@ endef
 $(foreach EXT,$(EXT_CXX),$(eval $(call BUILD_CXX,$(EXT))))
 
 $(BIN): $(OBJS) Makefile
-	$(LD) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
+	$(LD) $(LDFLAGS) -g -o $@ $(OBJS) $(LDLIBS)
 
 # Compile and link tm_test.c
 $(TEST_OBJ): $(TEST_SRC) $(HDRS_C)
 	$(CC) $(CCFLAGS) -c -o $@ $<
 
 $(TEST_EXEC): $(TEST_OBJ) $(OBJS)
-	$(CC) $(CCFLAGS) -o $@ $(TEST_OBJ) $(OBJS) $(LDLIBS)
+	$(CC) $(CCFLAGS) -g -o $@ $(TEST_OBJ) $(OBJS) $(LDLIBS)
 
 run_test: $(TEST_EXEC)
 	./$(TEST_EXEC)

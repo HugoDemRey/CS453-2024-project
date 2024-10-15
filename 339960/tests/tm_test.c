@@ -33,24 +33,13 @@ int main(void) {
 
     t[0] = create_blocked_thread(1);
     t[1] = create_blocked_thread(2);
-    t[2] = create_blocked_thread(3);
-    t[3] = create_blocked_thread(4);
-    t[4] = create_blocked_thread(5);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 2; i++) {
         args[i].b = b;
         args[i].t = t[i];
         pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)&args[i]);
     }
-
     
-    for (int i = 0; i < 5; i++) {
-        pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)t[i]);
-    }
-
-    for (int i = 0; i < 5; i++) {
-        pthread_join(threads[i], NULL);
-    }
 
     destroy_batcher(b);
     b = NULL;
