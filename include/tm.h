@@ -28,6 +28,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 // -------------------------------------------------------------------------- //
 
@@ -59,3 +61,42 @@ bool     tm_read(shared_t, tx_t, void const*, size_t, void*);
 bool     tm_write(shared_t, tx_t, void const*, size_t, void*);
 alloc_t  tm_alloc(shared_t, tx_t, size_t, void**);
 bool     tm_free(shared_t, tx_t, void*);
+
+// Added functions + structs
+
+typedef struct dual_memory_segment {
+    bool already_accessed;
+    uint8_t* read_only;
+    uint8_t* read_write;
+} dual_memory_segment;
+
+
+typedef struct memory {
+    int nb_segments;
+    int segment_size; 
+    dual_memory_segment* data;
+} memory;
+
+
+typedef struct batcher {
+    int count;
+    int remaining;
+    struct blocked_thread* blocked_threads_head;
+    struct blocked_thread* blocked_threads_tail;
+    pthread_mutex_t* enter_lock;
+} batcher;
+
+
+typedef struct blocked_thread {
+    sem_t sem;                       // Semaphore for signaling
+    struct blocked_thread* next;     // Pointer to the next node
+    int id;                          // Identifier for the thread
+} blocked_thread;
+
+
+memory* init_memory(void);
+void destroy_dual_memory_segment(dual_memory_segment* mem_seg);
+void destroy_memory(memory* mem);
+void wake_up_threads(batcher* batcher);
+void enter_batcher(batcher* batcher, blocked_thread* blocked_thread);
+void leave_batcher(batcher* batcher);
