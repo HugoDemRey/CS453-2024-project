@@ -67,3 +67,7 @@ $(TEST_EXEC): $(TEST_OBJ) $(OBJS)
 # Run the test
 run_test: $(TEST_EXEC)
 	./$(TEST_EXEC)
+
+# Debugging info
+$(info Source files: $(SRCS_C) $(SRCS_CXX))
+$(info Object files: $(OBJS))
