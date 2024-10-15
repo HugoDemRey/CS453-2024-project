@@ -36,63 +36,39 @@
 #include "macros.h"
 
 
-/* STRUCTS PART */
-
-typedef struct memory_segment {
-    int size;
-    bool already_accessed;
-    int* data;
-} memory_segment;
-
-
-typedef struct memory {
-    int size;
-    memory_segment* read_only;
-    memory_segment* read_write;
-} memory;
-
-
-typedef struct batcher {
-    int count;
-    int remaining;
-    struct blocked_thread* blocked_threads_head;
-    struct blocked_thread* blocked_threads_tail;
-    pthread_mutex_t* enter_lock;
-} batcher;
-
-
-typedef struct blocked_thread {
-    sem_t sem;                       // Semaphore for signaling
-    struct blocked_thread* next;     // Pointer to the next node
-    int id;                          // Identifier for the thread
-} blocked_thread;
-
+/* STRUCTS ARE IN TM.H */
 
 /* MEMORY PART */
 
 memory* init_memory(void) {
     memory* mem = (memory*) malloc(sizeof(memory));
-    mem->size = 0;
-    mem->read_only = NULL;
-    mem->read_write = NULL;
+    mem->nb_segments = 0;
+    mem->segment_size = 0;
+    mem->data->already_accessed = false;
+    mem->data->read_only = NULL;
+    mem->data->read_write = NULL;
     return mem;
 }
 
-void destroy_memory_segment(memory_segment* mem_seg) {
-    if (mem_seg != NULL) return;
-    free(mem_seg->data);
-    mem_seg->data = NULL;
-    free(mem_seg);
-    mem_seg = NULL;
+void destroy_dual_memory_segment(dual_memory_segment* dual_mem_seg) {
+    if (dual_mem_seg == NULL) return;
+    free(dual_mem_seg->read_only);
+    dual_mem_seg->read_only = NULL;
+    free(dual_mem_seg->read_write);
+    dual_mem_seg->read_write = NULL;
+    free(dual_mem_seg);
+    dual_mem_seg = NULL;
 }
 
 void destroy_memory(memory* mem) {
-    if(mem->read_only != NULL) {
-        destroy_memory_segment(mem->read_only);
+    if(mem->data->read_only != NULL) {
+        destroy_dual_memory_segment(mem->data->read_only);
     }
-    if(mem->read_write != NULL) {
-        destroy_memory_segment(mem->read_write);
+    if(mem->data->read_write != NULL) {
+        destroy_dual_memory_segment(mem->data->read_write);
     }
+    free(mem->data);
+    mem->data = NULL;
     free(mem);
     mem = NULL;
 }
