@@ -86,6 +86,9 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 void leave_batcher(batcher* batcher) {
     int remaining = batcher->remaining;
     if (remaining == 1) {
+
+        /* Update the memory since no thread is able to access it. I.e. all other threads are sleeping */
+        
         /* 
         We would maybe want to use a lock to prevent a new process to enter the batcher and bypass the semaphore by seeing remaining == 0
         but it is not necessary since if a new process arrives at this moment, it will not be blocked and work with the other processes and also increment "remaining" by one as expected.
