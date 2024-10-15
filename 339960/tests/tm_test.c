@@ -25,11 +25,11 @@ void* enter_batcher_thread(void* arg) {
 
 int main(void) {
 
-
+    // FIXME : the test is not correct.
     batcher* b = init_batcher();
-    pthread_t threads[5];
-    blocked_thread* t[5];
-    thread_arg args[5];
+    pthread_t threads[2];
+    blocked_thread* t[2];
+    thread_arg args[2];
 
     t[0] = create_blocked_thread(1);
     t[1] = create_blocked_thread(2);
@@ -39,7 +39,15 @@ int main(void) {
         args[i].t = t[i];
         pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)&args[i]);
     }
+
     
+    for (int i = 0; i < 5; i++) {
+        pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)t[i]);
+    }
+
+    for (int i = 0; i < 5; i++) {
+        pthread_join(threads[i], NULL);
+    }
 
     destroy_batcher(b);
     b = NULL;
