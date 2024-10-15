@@ -44,6 +44,8 @@ memory* init_memory(void) {
     memory* mem = (memory*) malloc(sizeof(memory));
     mem->nb_segments = 0;
     mem->segment_size = 0;
+
+    mem->data = (dual_memory_segment*) malloc(sizeof(dual_memory_segment));
     mem->data->already_accessed = false;
     mem->data->read_only = NULL;
     mem->data->read_write = NULL;
@@ -74,10 +76,37 @@ void destroy_memory(memory* mem) {
 }
 
 /* BATCHER PART */
+batcher* init_batcher(void) {
+    batcher* batcher_ptr = (batcher*) malloc(sizeof(batcher));
+    batcher_ptr->count = 0;
+    batcher_ptr->remaining = 0;
+    batcher_ptr->blocked_threads_head = NULL;
+    batcher_ptr->blocked_threads_tail = NULL;
+    batcher_ptr->enter_lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(batcher_ptr->enter_lock, NULL);
+
+    return batcher_ptr;
+}
+
+void destroy_batcher(batcher* batcher) {
+    if (batcher == NULL) return;
+    blocked_thread* current = batcher->blocked_threads_head;
+    blocked_thread* next = NULL;
+    while (current != NULL) {
+        next = current->next;
+        sem_destroy(&current->sem);
+        free(current);
+        current = next;
+    }
+    free(batcher->enter_lock);
+    batcher->enter_lock = NULL;
+    free(batcher);
+    batcher = NULL;
+}
+
 void wake_up_threads(batcher* batcher) {
     sem_post(&batcher->blocked_threads_head->sem);
 }
-
 
 void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
     pthread_mutex_lock(batcher->enter_lock);
