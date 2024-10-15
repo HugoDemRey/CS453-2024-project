@@ -3,29 +3,58 @@
 #include <stdlib.h>
 
 
-int main(void){
+blocked_thread* create_blocked_thread(int id){
+    blocked_thread* b = malloc(sizeof(blocked_thread));
+    sem_init(&b->sem, 0, 0);
+    b->next = NULL;
+    b->id = id;
+    return b;
+}
+
+typedef struct {
+    batcher* b;
+    blocked_thread* t;
+} thread_arg;
+
+void* enter_batcher_thread(void* arg) {
+    thread_arg* ta = (thread_arg*)arg;
+    enter_batcher(ta->b, ta->t);
+    return NULL;
+}
+
+
+int main(void) {
+
 
     batcher* b = init_batcher();
+    pthread_t threads[5];
+    blocked_thread* t[5];
+    thread_arg args[5];
 
-    blocked_thread* head = malloc(sizeof(blocked_thread));
-    blocked_thread* tail = malloc(sizeof(blocked_thread));
+    t[0] = create_blocked_thread(1);
+    t[1] = create_blocked_thread(2);
+    t[2] = create_blocked_thread(3);
+    t[3] = create_blocked_thread(4);
+    t[4] = create_blocked_thread(5);
 
-    b->blocked_threads_head = head;
-    b->blocked_threads_tail = tail;
+    for (int i = 0; i < 5; i++) {
+        args[i].b = b;
+        args[i].t = t[i];
+        pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)&args[i]);
+    }
+
     
-    printf("Batcher count: %d\n", b->count);
-    printf("Batcher remaining: %d\n", b->remaining);
-    printf("Batcher blocked_threads_head: %p\n", b->blocked_threads_head);
-    printf("Batcher blocked_threads_tail: %p\n", b->blocked_threads_tail);
-    printf("Batcher enter_lock: %p\n", b->enter_lock);
+    for (int i = 0; i < 5; i++) {
+        pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)t[i]);
+    }
+
+    for (int i = 0; i < 5; i++) {
+        pthread_join(threads[i], NULL);
+    }
 
     destroy_batcher(b);
-
-    printf("Batcher count: %d\n", b->count);
-    printf("Batcher remaining: %d\n", b->remaining);
-    printf("Batcher blocked_threads_head: %p\n", b->blocked_threads_head);
-    printf("Batcher blocked_threads_tail: %p\n", b->blocked_threads_tail);
-    printf("Batcher enter_lock: %p\n", b->enter_lock);
+    b = NULL;
 
     return 1;
 }
+

@@ -78,29 +78,49 @@ void destroy_memory(memory* mem) {
 /* BATCHER PART */
 batcher* init_batcher(void) {
     batcher* batcher_ptr = (batcher*) malloc(sizeof(batcher));
+    if (batcher_ptr == NULL) {
+        fprintf(stderr, "Failed to allocate memory for batcher\n");
+        return NULL;
+    }
+
     batcher_ptr->count = 0;
     batcher_ptr->remaining = 0;
     batcher_ptr->blocked_threads_head = NULL;
     batcher_ptr->blocked_threads_tail = NULL;
+
     batcher_ptr->enter_lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
-    pthread_mutex_init(batcher_ptr->enter_lock, NULL);
+    if (batcher_ptr->enter_lock == NULL) {
+        fprintf(stderr, "Failed to allocate memory for mutex\n");
+        free(batcher_ptr);
+        return NULL;
+    }
+
+    if (pthread_mutex_init(batcher_ptr->enter_lock, NULL) != 0) {
+        fprintf(stderr, "Failed to initialize mutex for batcher\n");
+        free(batcher_ptr->enter_lock);
+        free(batcher_ptr);
+        return NULL;
+    }
 
     return batcher_ptr;
 }
 
 void destroy_batcher(batcher* batcher) {
     if (batcher == NULL) return;
+
     blocked_thread* current = batcher->blocked_threads_head;
-    blocked_thread* next = NULL;
     while (current != NULL) {
-        next = current->next;
+        blocked_thread* next = current->next;
         sem_destroy(&current->sem);
         free(current);
         current = next;
     }
 
-    pthread_mutex_destroy(batcher->enter_lock);
-    batcher->enter_lock = NULL;
+    if (batcher->enter_lock != NULL) {
+        pthread_mutex_destroy(batcher->enter_lock);
+        batcher->enter_lock = NULL;
+    }
+
     free(batcher);
 }
 
@@ -109,6 +129,9 @@ void wake_up_threads(batcher* batcher) {
 }
 
 void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
+
+    printf("Thread %d is entering the batcher\n", blocked_thread->id);
+
     pthread_mutex_lock(batcher->enter_lock);
 
 
