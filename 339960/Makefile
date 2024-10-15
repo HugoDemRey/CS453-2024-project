@@ -10,7 +10,7 @@ BUILD ?= release
 # Directories
 INCLUDE_DIR := ../include
 SOURCE_DIR  := .
-TEST_SRC    := ./tests/tm_test.c  # Adjust this to where tm_test.c is located
+TEST_SRC    := ./tm_test.c  # Adjust this to where tm_test.c is located
 
 # File extensions
 EXT_H    := h

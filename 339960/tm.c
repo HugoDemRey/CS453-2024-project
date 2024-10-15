@@ -63,11 +63,8 @@ void destroy_dual_memory_segment(dual_memory_segment* dual_mem_seg) {
 }
 
 void destroy_memory(memory* mem) {
-    if(mem->data->read_only != NULL) {
-        destroy_dual_memory_segment(mem->data->read_only);
-    }
-    if(mem->data->read_write != NULL) {
-        destroy_dual_memory_segment(mem->data->read_write);
+    if (mem->data != NULL) {
+        destroy_dual_memory_segment(mem->data);
     }
     free(mem->data);
     mem->data = NULL;
