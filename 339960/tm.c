@@ -21,11 +21,164 @@
 #endif
 
 // External headers
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <unistd.h>
 
 // Internal headers
 #include <tm.h>
-
 #include "macros.h"
+
+
+/* STRUCTS PART */
+
+typedef struct memory_segment {
+    int size;
+    bool already_accessed;
+    int* data;
+} memory_segment;
+
+
+typedef struct memory {
+    int size;
+    memory_segment* read_only;
+    memory_segment* read_write;
+} memory;
+
+
+typedef struct batcher {
+    int count;
+    int remaining;
+    struct blocked_thread* blocked_threads_head;
+    struct blocked_thread* blocked_threads_tail;
+    pthread_mutex_t* enter_lock;
+} batcher;
+
+
+typedef struct blocked_thread {
+    sem_t sem;                       // Semaphore for signaling
+    struct blocked_thread* next;     // Pointer to the next node
+    int id;                          // Identifier for the thread
+} blocked_thread;
+
+
+/* MEMORY PART */
+
+memory* init_memory(void) {
+    memory* mem = (memory*) malloc(sizeof(memory));
+    mem->size = 0;
+    mem->read_only = NULL;
+    mem->read_write = NULL;
+    return mem;
+}
+
+void destroy_memory_segment(memory_segment* mem_seg) {
+    if (mem_seg != NULL) return;
+    free(mem_seg->data);
+    mem_seg->data = NULL;
+    free(mem_seg);
+    mem_seg = NULL;
+}
+
+void destroy_memory(memory* mem) {
+    if(mem->read_only != NULL) {
+        destroy_memory_segment(mem->read_only);
+    }
+    if(mem->read_write != NULL) {
+        destroy_memory_segment(mem->read_write);
+    }
+    free(mem);
+    mem = NULL;
+}
+
+/* BATCHER PART */
+void wake_up_threads(batcher* batcher) {
+    sem_post(&batcher->blocked_threads_head->sem);
+}
+
+
+void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
+    pthread_mutex_lock(batcher->enter_lock);
+
+
+    if (batcher->remaining == 0) {
+        // Maybe use atomic operations of C
+        batcher->remaining++;
+        pthread_mutex_unlock(batcher->enter_lock);
+        return;
+    }
+
+    if (batcher->blocked_threads_tail == NULL) {
+        batcher->blocked_threads_head = blocked_thread;
+        batcher->blocked_threads_tail = blocked_thread;
+        blocked_thread->next = NULL;
+    } else {
+        batcher->blocked_threads_tail->next = blocked_thread;
+        batcher->blocked_threads_tail = blocked_thread;
+        blocked_thread->next = NULL;
+    }
+
+    pthread_mutex_unlock(batcher->enter_lock);
+
+    
+    /* Make the current thread sleep using sem (sem_t) which is contained in blocked_thread, wake him up when sem tells the thread to wake up */
+    printf("Thread %d is going to sleep.\n", blocked_thread->id);
+    sem_wait(&blocked_thread->sem);
+    printf("Thread %d woke up.\n", blocked_thread->id);
+
+    // Maybe use atomic operations of C
+    batcher->remaining++;
+
+    /* 
+    FIXME : If a thread assigns itself right after the IF condition as the next element of the tail, it will never be woken up.
+    Solution 1: lock the mutex again and check if the next element is the current thread, if so, wake it up.
+    / *
+    // Solution 1
+    pthread_mutex_lock(batcher->enter_lock);
+
+    /* Wake up the next thread in the list */
+    if (blocked_thread->next == NULL) {
+        // Solution 1
+        batcher->blocked_threads_tail = NULL;
+        blocked_thread = NULL;
+        return;
+    }
+    blocked_thread = NULL;
+
+    // Solution 1
+    pthread_mutex_unlock(batcher->enter_lock);
+    
+    printf("Thread %d is waking up the next thread\n", blocked_thread->id);
+    sem_post(&blocked_thread->next->sem);
+
+}
+
+void leave_batcher(batcher* batcher) {
+    int remaining = batcher->remaining;
+    if (remaining == 1) {
+
+        /* Update the memory since no thread is able to access it. I.e. all other threads are sleeping */
+        
+        /* 
+        We would maybe want to use a lock to prevent a new process to enter the batcher and bypass the semaphore by seeing remaining == 0
+        but it is not necessary since if a new process arrives at this moment, it will not be blocked and work with the other processes and also increment "remaining" by one as expected.
+        */
+        wake_up_threads(batcher);
+        batcher->remaining--;
+        return;
+    }
+    // Maybe use atomic operations of C
+    batcher->remaining--;
+}
+
+
+/* STM PART */
 
 /** Create (i.e. allocate + init) a new shared memory region, with one first non-free-able allocated segment of the requested size and alignment.
  * @param size  Size of the first shared segment of memory to allocate (in bytes), must be a positive multiple of the alignment
@@ -33,6 +186,7 @@
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
 shared_t tm_create(size_t unused(size), size_t unused(align)) {
+    
     // TODO: tm_create(size_t, size_t)
     return invalid_shared;
 }

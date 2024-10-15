@@ -22,7 +22,7 @@ CXX      := $(CXX)
 CXXFLAGS := -Wall -Wextra -Wfatal-errors -O2 -std=c++17 -fPIC -I$(INCLUDE_DIR)
 LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
 LDFLAGS  := -shared
-LDLIBS   :=
+LDLIBS   := -lpthread
 
 .PHONY: build clean
 
