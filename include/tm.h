@@ -97,6 +97,8 @@ typedef struct blocked_thread {
 memory* init_memory(void);
 void destroy_dual_memory_segment(dual_memory_segment* mem_seg);
 void destroy_memory(memory* mem);
+batcher* init_batcher(void);
+void destroy_batcher(batcher* batcher);
 void wake_up_threads(batcher* batcher);
 void enter_batcher(batcher* batcher, blocked_thread* blocked_thread);
 void leave_batcher(batcher* batcher);
