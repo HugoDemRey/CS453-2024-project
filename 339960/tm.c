@@ -98,10 +98,10 @@ void destroy_batcher(batcher* batcher) {
         free(current);
         current = next;
     }
-    free(batcher->enter_lock);
+
+    pthread_mutex_destroy(batcher->enter_lock);
     batcher->enter_lock = NULL;
     free(batcher);
-    batcher = NULL;
 }
 
 void wake_up_threads(batcher* batcher) {
