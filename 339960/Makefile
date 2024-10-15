@@ -7,7 +7,7 @@ EXT_CXX  := C cc cpp cxx c++
 
 INCLUDE_DIR := ../include
 SOURCE_DIR  := .
-TEST_SRC := ./tm_test.c  # Adjust this to where tm_test.c is located
+TEST_SRC := ./tests/tm_test.c  # Adjust this to where tm_test.c is located
 
 WILD_EXT  = $(strip $(foreach EXT,$($(1)),$(wildcard $(2)/*.$(EXT))))
 
