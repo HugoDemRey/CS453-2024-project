@@ -18,34 +18,47 @@ typedef struct {
 
 void* enter_batcher_thread(void* arg) {
     thread_arg* ta = (thread_arg*)arg;
+
+    // Add a delay
+    int delay = ta->t->id + 3; // delay corresponds to the id of the thread + 3
+    //printf("Thread %d starts executing with %d s of delay \n\n", ta->t->id, delay);
+    //sleep(delay);
+    
     enter_batcher(ta->b, ta->t);
+    
+    
+    //printf("Thread %d is done, it will leave the batcher in %d seconds \n\n", ta->t->id, delay2);
+    int delay2 = 3;
+    sleep(delay2);
+
+    leave_batcher(ta->b);
+
     return NULL;
 }
 
 
 int main(void) {
 
+    int nb_threads = 3;
+
     // FIXME : the test is not correct.
     batcher* b = init_batcher();
-    pthread_t threads[2];
-    blocked_thread* t[2];
-    thread_arg args[2];
+    print_batcher(b);
+    pthread_t threads[nb_threads];
+    blocked_thread* t[nb_threads];
+    thread_arg args[nb_threads];
 
-    t[0] = create_blocked_thread(1);
-    t[1] = create_blocked_thread(2);
+    for (int i = 0; i < nb_threads; i++) {
+        t[i] = create_blocked_thread(i);
+    }
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < nb_threads; i++) {
         args[i].b = b;
         args[i].t = t[i];
         pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)&args[i]);
     }
 
-    
-    for (int i = 0; i < 5; i++) {
-        pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)t[i]);
-    }
-
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < nb_threads; i++) {
         pthread_join(threads[i], NULL);
     }
 

@@ -73,6 +73,19 @@ void destroy_memory(memory* mem) {
 }
 
 /* BATCHER PART */
+void print_batcher(batcher* b) {
+    printf("### Batcher ###\n");
+    printf("Batcher count: %d\n", b->count);
+    printf("Batcher remaining: %d\n", b->remaining);
+    printf("Blocked threads: \n");
+    blocked_thread* bt = b->blocked_threads_head;
+    while (bt != NULL) {
+        printf("    - thread id n.%d \n", bt->id);
+        bt = bt->next;
+    }
+    printf("\n######\n\n");
+}
+
 batcher* init_batcher(void) {
     batcher* batcher_ptr = (batcher*) malloc(sizeof(batcher));
     if (batcher_ptr == NULL) {
@@ -136,6 +149,7 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
         // Maybe use atomic operations of C
         batcher->remaining++;
         pthread_mutex_unlock(batcher->enter_lock);
+        print_batcher(batcher);
         return;
     }
 
@@ -153,9 +167,10 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 
     
     /* Make the current thread sleep using sem (sem_t) which is contained in blocked_thread, wake him up when sem tells the thread to wake up */
-    printf("Thread %d is going to sleep.\n", blocked_thread->id);
+    printf("Thread %d is sleeping in the batcher.\n", blocked_thread->id);
+    print_batcher(batcher);
     sem_wait(&blocked_thread->sem);
-    printf("Thread %d woke up.\n", blocked_thread->id);
+    printf("Thread %d woke up from the batcher.\n", blocked_thread->id);
 
     // Maybe use atomic operations of C
     batcher->remaining++;
@@ -178,6 +193,7 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 
     // Solution 1
     pthread_mutex_unlock(batcher->enter_lock);
+    printf("\n PASSED \n");
     
     printf("Thread %d is waking up the next thread\n", blocked_thread->id);
     sem_post(&blocked_thread->next->sem);
@@ -186,7 +202,9 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 
 void leave_batcher(batcher* batcher) {
     int remaining = batcher->remaining;
+
     if (remaining == 1) {
+        printf("Last thread is leaving the batcher, (remaining=%d) \n\n", remaining);
 
         /* Update the memory since no thread is able to access it. I.e. all other threads are sleeping */
         
@@ -198,6 +216,7 @@ void leave_batcher(batcher* batcher) {
         batcher->remaining--;
         return;
     }
+    printf("Thread is leaving the batcher, remaining=%d \n\n", remaining);
     // Maybe use atomic operations of C
     batcher->remaining--;
 }
