@@ -22,9 +22,9 @@ TEST_OBJ := $(TEST_SRC:.c=.o)
 TEST_EXEC := tm_test
 
 CC       := $(CC)
-CCFLAGS  := -Wall -Wextra -Wfatal-errors -O0 -std=c11 -fPIC -g -I$(INCLUDE_DIR)
+CCFLAGS  := -Wall -Wextra -Wfatal-errors -O0 -std=c11 -fPIC -g -I$(INCLUDE_DIR)  # Use -O0 instead of -O2
 CXX      := $(CXX)
-CXXFLAGS := -Wall -Wextra -Wfatal-errors -O0 -std=c++17 -fPIC -g -I$(INCLUDE_DIR)
+CXXFLAGS := -Wall -Wextra -Wfatal-errors -O0 -std=c++17 -fPIC -g -I$(INCLUDE_DIR)  # Use -O0 instead of -O2
 LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
 LDFLAGS  := -shared
 LDLIBS   := -lm -lpthread
@@ -59,4 +59,4 @@ $(TEST_EXEC): $(TEST_OBJ) $(OBJS)
 	$(CC) $(CCFLAGS) -g -o $@ $(TEST_OBJ) $(OBJS) $(LDLIBS)
 
 run_test: $(TEST_EXEC)
-	./$(TEST_EXEC)
+	ulimit -c unlimited && ./$(TEST_EXEC)  # Allow core dumps to be generated
