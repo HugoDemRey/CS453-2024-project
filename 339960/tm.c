@@ -41,50 +41,155 @@
 
 /* MEMORY PART */
 
+void print_memory(memory* mem) {
+    if (mem == NULL) {
+        printf("NULL\n");
+        return;
+    }
+
+    printf("\n###### Memory ######\n");
+    printf("Number of segments: %d\n", mem->nb_segments);
+    printf("Segment size: %d Bytes \n", mem->segment_size);
+    printf("Data Total size: %d Bytes\n", mem->nb_segments * mem->segment_size);
+    printf("Lock: %p\n", &mem->lock);
+
+    printf("Data: \n");
+    if (mem->data == NULL) {
+        printf("    - No Data\n");
+        return;
+    } else {
+        for (int i = 0; i < mem->nb_segments; i++) {
+            printf("    Segment n.%d\n", i);
+            printf("       - Already accessed: %s\n", mem->data[i].already_accessed ? "true" : "false");
+            printf("       - Read only: %d\n", mem->data[i].read_only);
+            printf("       - Read write: %d\n", mem->data[i].read_write);
+        }
+    }
+    printf("#####################\n\n");
+}
+
 memory* init_memory(void) {
     memory* mem = (memory*) malloc(sizeof(memory));
     mem->nb_segments = 0;
-    mem->segment_size = 0;
+    mem->segment_size = sizeof(dual_memory_segment);
 
-    if (pthread_mutex_init(&mem->lock, NULL) != 0) {
+    mem->lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+    if (pthread_mutex_init(mem->lock, NULL) != 0) {
         fprintf(stderr, "Failed to initialize mutex for memory\n");
         free(mem);
         return NULL;
     }
 
-    mem->data = (dual_memory_segment*) malloc(sizeof(dual_memory_segment));
-    mem->data->already_accessed = false;
-    mem->data->read_only = NULL;
-    mem->data->read_write = NULL;
+    mem->data = NULL;
+
     return mem;
 }
 
-void destroy_dual_memory_segment(dual_memory_segment* dual_mem_seg) {
-    if (dual_mem_seg == NULL) return;
-    free(dual_mem_seg->read_only);
-    dual_mem_seg->read_only = NULL;
-    free(dual_mem_seg->read_write);
-    dual_mem_seg->read_write = NULL;
-    free(dual_mem_seg);
-    dual_mem_seg = NULL;
+/**
+ * @brief Initializes a dual memory segment.
+ *
+ * This function sets up a dual memory segment by allocating and initializing
+ * the necessary resources. It ensures that the memory segment is properly
+ * configured for subsequent operations.
+ *
+ * @return Returns the pointer to the newly created dual memory segment, or NULL if the allocation failed.
+ */
+dual_memory_segment* init_dual_memory_segment() {
+    dual_memory_segment* dual_mem_seg_ptr = (dual_memory_segment*) malloc(sizeof(dual_memory_segment));
+    if (dual_mem_seg_ptr == NULL) {
+        fprintf(stderr, "Failed to allocate memory for dual memory segment\n");
+        return NULL;
+    }
+
+    dual_mem_seg_ptr->already_accessed = false;
+    dual_mem_seg_ptr->read_only = (uint8_t) rand();
+    dual_mem_seg_ptr->read_write = (uint8_t) rand();
+    
+    return dual_mem_seg_ptr;
+}
+
+/**
+ * @brief Adds a dual memory segment to the memory structure.
+ *
+ * This function adds a dual memory segment to the memory structure by allocating
+ * and initializing the necessary resources. It ensures that the memory segment
+ * is properly configured for subsequent operations.
+ *
+ * @param mem Pointer to the memory structure.
+ * @param dms The dual memory segment to be added.
+ * @return The index of the newly added dual memory segment, or -1 if the allocation failed.
+ */
+int add_dual_memory_segment_to_memory(memory* mem, dual_memory_segment dms) {
+    if (mem == NULL) return -1;
+    int new_segment_index = mem->nb_segments;
+    mem->nb_segments++;
+    if (mem->data == NULL) {
+        mem->data = (dual_memory_segment*) malloc(mem->segment_size);
+        if (mem->data == NULL) {
+            fprintf(stderr, "Failed to allocate memory for dual memory segment\n");
+            return -1;
+        }
+    } else {
+        mem->data = (dual_memory_segment*) realloc(mem->data, mem->segment_size * (mem->nb_segments));
+        if (mem->data == NULL) {
+            fprintf(stderr, "Failed to reallocate memory for dual memory segment\n");
+            return -1;
+        }
+    }
+    mem->data[new_segment_index] = dms;
+    return new_segment_index;
+
 }
 
 void destroy_memory(memory* mem) {
-    if (mem->data != NULL) {
-        destroy_dual_memory_segment(mem->data);
-    }
-    free(mem->data);
+    if (mem == NULL) return;
+    if (mem->lock != NULL) {
+        pthread_mutex_destroy(mem->lock);
+    } 
+    //free(mem->data);
     mem->data = NULL;
     free(mem);
     mem = NULL;
 }
 
+
+/**
+ * @brief Implementation of concurrent algorithms for transactional memory.
+ * @param mem The memory structure to allocate the segment in.
+ * @return The index of the newly allocated segment.
+ * This function does not modify the memory itsfelf, it uses other functions to do so.
+ * This function uses a mutex to lock the memory structure during the calls to the other functions.
+ */
 int allocate_segment(memory* mem) {
     if (mem == NULL) return -1;
-    int new_index = atomic_fetch_add(&mem->nb_segments, 1); // avoids clashes with other threads
-    // UNFINISHED
+    pthread_mutex_lock(mem->lock);
+
+    dual_memory_segment dms = *init_dual_memory_segment();
+    int new_index = add_dual_memory_segment_to_memory(mem, dms);
+
+    pthread_mutex_unlock(mem->lock);
     return new_index;
 
+}
+
+void free_segment(memory* mem, int index) {
+    if (mem == NULL) return;
+    pthread_mutex_lock(mem->lock);
+
+    if (index < 0 || index >= mem->nb_segments) {
+        fprintf(stderr, "Index out of bounds\n");
+        pthread_mutex_unlock(mem->lock);
+        return;
+    }
+
+    mem->nb_segments--;
+    for (int i = index; i < mem->nb_segments; i++) {
+        mem->data[i] = mem->data[i+1];
+    }  
+    mem->data = (dual_memory_segment*) realloc(mem->data, mem->segment_size * (mem->nb_segments));
+
+
+    pthread_mutex_unlock(mem->lock);
 }
 
 /* BATCHER PART */

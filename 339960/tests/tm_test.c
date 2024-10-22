@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* BATCHER TESTS*/
 
 blocked_thread* create_blocked_thread(int id){
     blocked_thread* b = malloc(sizeof(blocked_thread));
@@ -38,7 +39,7 @@ void* enter_batcher_thread(void* arg) {
 }
 
 
-int main(void) {
+void batcher_test(void) {
 
     int nb_threads = 100;
 
@@ -66,7 +67,40 @@ int main(void) {
 
     destroy_batcher(b);
     b = NULL;
-
-    return 1;
 }
 
+
+/* MEMORY TESTS */
+
+void memory_test(void) {
+    // Memory Initialization
+    printf("Initializing memory\n");
+    memory* mem = init_memory();
+    print_memory(mem);
+
+    // Memory Allocation
+    printf("Allocating 4 segments\n");
+    int new_index = allocate_segment(mem);
+    int new_index2 = allocate_segment(mem);
+    int new_index3 = allocate_segment(mem);
+    int new_index4 = allocate_segment(mem);
+    print_memory(mem);
+
+    // Memory Deallocation 1
+    printf("Freeing segment %d\n", new_index);
+    free_segment(mem, new_index);
+    print_memory(mem);
+
+    // Memory Deallocation 2
+    printf("Freeing segment %d\n", new_index2);
+    free_segment(mem, new_index2);
+    print_memory(mem);
+
+    destroy_memory(mem);
+    mem = NULL;
+}
+
+int main(void) {
+    memory_test();
+    return 1;
+}
