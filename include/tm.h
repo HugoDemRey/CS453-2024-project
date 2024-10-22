@@ -88,15 +88,17 @@ typedef struct batcher {
 
 
 typedef struct blocked_thread {
+    int id;                          // Identifier for the thread
     sem_t sem;                       // Semaphore for signaling
     struct blocked_thread* next;     // Pointer to the next node
-    int id;                          // Identifier for the thread
 } blocked_thread;
 
 
 memory* init_memory(void);
 void destroy_dual_memory_segment(dual_memory_segment* mem_seg);
 void destroy_memory(memory* mem);
+
+void print_batcher(batcher* batcher);
 batcher* init_batcher(void);
 void destroy_batcher(batcher* batcher);
 void wake_up_threads(batcher* batcher);

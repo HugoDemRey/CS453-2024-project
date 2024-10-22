@@ -27,17 +27,10 @@ typedef struct {
 void* enter_batcher_thread(void* arg) {
     thread_arg* ta = (thread_arg*)arg;
 
-    // Add a delay
-    int delay = ta->t->id + 3; // delay corresponds to the id of the thread + 3
-    //printf("Thread %d starts executing with %d s of delay \n\n", ta->t->id, delay);
-    //sleep(delay);
-    
     enter_batcher(ta->b, ta->t);
     
-    
-    int delay2 = 3;
-    printf("Thread %d is done, it will leave the batcher in %d seconds \n\n", ta->t->id, delay2);
-    sleep(delay2);
+    int delay2 = rand() % 5000000;
+    usleep(delay2);
 
     leave_batcher(ta->b);
 
@@ -47,7 +40,7 @@ void* enter_batcher_thread(void* arg) {
 
 int main(void) {
 
-    int nb_threads = 3;
+    int nb_threads = 100;
 
     // FIXME : the test is not correct.
     batcher* b = init_batcher();
@@ -63,6 +56,7 @@ int main(void) {
     for (int i = 0; i < nb_threads; i++) {
         args[i].b = b;
         args[i].t = t[i];
+        usleep(100000); // sleep for 100 milliseconds (0.1 seconds)
         pthread_create(&threads[i], NULL, enter_batcher_thread, (void*)&args[i]);
     }
 
