@@ -65,7 +65,7 @@ bool     tm_free(shared_t, tx_t, void*);
 // Added functions + structs
 
 typedef struct dual_memory_segment {
-    bool already_accessed;
+    bool already_accessed; // use atomic operations to set this to true so that we avoid thread clashes
     uint8_t* read_only;
     uint8_t* read_write;
 } dual_memory_segment;
@@ -73,8 +73,9 @@ typedef struct dual_memory_segment {
 
 typedef struct memory {
     int nb_segments;
-    int segment_size; 
-    dual_memory_segment* data;
+    int segment_size; //The size of each segment is the same
+    pthread_mutex_t* lock;
+    dual_memory_segment* data; // Array of dual memory segments
 } memory;
 
 
@@ -97,6 +98,7 @@ typedef struct blocked_thread {
 memory* init_memory(void);
 void destroy_dual_memory_segment(dual_memory_segment* mem_seg);
 void destroy_memory(memory* mem);
+int allocate_segment(memory* mem); // Returns the index of the allocated segment
 
 void print_batcher(batcher* batcher);
 batcher* init_batcher(void);

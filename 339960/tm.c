@@ -30,6 +30,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
+#include <stdatomic.h>
 
 // Internal headers
 #include <tm.h>
@@ -44,6 +45,12 @@ memory* init_memory(void) {
     memory* mem = (memory*) malloc(sizeof(memory));
     mem->nb_segments = 0;
     mem->segment_size = 0;
+
+    if (pthread_mutex_init(&mem->lock, NULL) != 0) {
+        fprintf(stderr, "Failed to initialize mutex for memory\n");
+        free(mem);
+        return NULL;
+    }
 
     mem->data = (dual_memory_segment*) malloc(sizeof(dual_memory_segment));
     mem->data->already_accessed = false;
@@ -70,6 +77,14 @@ void destroy_memory(memory* mem) {
     mem->data = NULL;
     free(mem);
     mem = NULL;
+}
+
+int allocate_segment(memory* mem) {
+    if (mem == NULL) return -1;
+    int new_index = atomic_fetch_add(&mem->nb_segments, 1); // avoids clashes with other threads
+    // UNFINISHED
+    return new_index;
+
 }
 
 /* BATCHER PART */
