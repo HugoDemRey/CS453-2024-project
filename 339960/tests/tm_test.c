@@ -5,7 +5,15 @@
 
 blocked_thread* create_blocked_thread(int id){
     blocked_thread* b = malloc(sizeof(blocked_thread));
-    sem_init(&b->sem, 0, 0);
+    if (b == NULL) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+
+    if (sem_init(&b->sem, 0, 0) != 0) {
+        perror("sem_init");
+        exit(EXIT_FAILURE);
+    }
     b->next = NULL;
     b->id = id;
     return b;
@@ -27,8 +35,8 @@ void* enter_batcher_thread(void* arg) {
     enter_batcher(ta->b, ta->t);
     
     
-    //printf("Thread %d is done, it will leave the batcher in %d seconds \n\n", ta->t->id, delay2);
     int delay2 = 3;
+    printf("Thread %d is done, it will leave the batcher in %d seconds \n\n", ta->t->id, delay2);
     sleep(delay2);
 
     leave_batcher(ta->b);
@@ -49,7 +57,7 @@ int main(void) {
     thread_arg args[nb_threads];
 
     for (int i = 0; i < nb_threads; i++) {
-        t[i] = create_blocked_thread(i);
+        t[i] = create_blocked_thread(i+1);
     }
 
     for (int i = 0; i < nb_threads; i++) {

@@ -73,10 +73,27 @@ void destroy_memory(memory* mem) {
 }
 
 /* BATCHER PART */
+void print_blocked_thread(blocked_thread* bt) {
+    if(bt == NULL) {
+        printf("    - NULL\n");
+        return;
+    }
+    printf("    - ptr: %p\n", bt);
+    printf("    - id: %d\n", bt->id);
+    printf("    - next: %p\n", bt->next);
+    printf("    - sem: %d\n", bt->sem);
+}
+
 void print_batcher(batcher* b) {
     printf("### Batcher ###\n");
-    printf("Batcher count: %d\n", b->count);
-    printf("Batcher remaining: %d\n", b->remaining);
+    printf("Count: %d\n", b->count);
+    printf("Remaining: %d\n", b->remaining);
+
+    printf("Blocked threads HEAD: \n");
+    print_blocked_thread(b->blocked_threads_head);
+    printf("Blocked threads TAIL: \n");
+    print_blocked_thread(b->blocked_threads_tail);
+
     printf("Blocked threads: \n");
     blocked_thread* bt = b->blocked_threads_head;
     while (bt != NULL) {
@@ -142,13 +159,17 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 
     printf("Thread %d is entering the batcher\n", blocked_thread->id);
 
+    printf("TRY TO LOCK\n");
     pthread_mutex_lock(batcher->enter_lock);
+    printf("LOCKED\n");
 
 
     if (batcher->remaining == 0) {
         // Maybe use atomic operations of C
         batcher->remaining++;
+        printf("TRY TO UNLOCK\n");
         pthread_mutex_unlock(batcher->enter_lock);
+        printf("UNLOCKED\n");
         print_batcher(batcher);
         return;
     }
@@ -163,37 +184,46 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
         blocked_thread->next = NULL;
     }
 
+    printf("TRY TO UNLOCK\n");
     pthread_mutex_unlock(batcher->enter_lock);
+    printf("UNLOCKED\n");
 
     
     /* Make the current thread sleep using sem (sem_t) which is contained in blocked_thread, wake him up when sem tells the thread to wake up */
-    printf("Thread %d is sleeping in the batcher.\n", blocked_thread->id);
     print_batcher(batcher);
+    printf("Thread %d is sleeping in the batcher.\n\n", blocked_thread->id);
     sem_wait(&blocked_thread->sem);
     printf("Thread %d woke up from the batcher.\n", blocked_thread->id);
 
-    // Maybe use atomic operations of C
-    batcher->remaining++;
 
     /* 
     FIXME : If a thread assigns itself right after the IF condition as the next element of the tail, it will never be woken up.
     Solution 1: lock the mutex again and check if the next element is the current thread, if so, wake it up.
-    / *
+    */
     // Solution 1
+    printf("TRY TO LOCK\n");
     pthread_mutex_lock(batcher->enter_lock);
+    printf("LOCKED\n");
+    batcher->remaining++;
+
+    print_batcher(batcher);
 
     /* Wake up the next thread in the list */
     if (blocked_thread->next == NULL) {
         // Solution 1
         batcher->blocked_threads_tail = NULL;
         blocked_thread = NULL;
+        printf("TRY TO UNLOCK\n");
+        pthread_mutex_unlock(batcher->enter_lock);
+        printf("UNLOCKED\n");
         return;
     }
     blocked_thread = NULL;
 
     // Solution 1
+    printf("TRY TO UNLOCK\n");
     pthread_mutex_unlock(batcher->enter_lock);
-    printf("\n PASSED \n");
+    printf("UNLOCKED\n");
     
     printf("Thread %d is waking up the next thread\n", blocked_thread->id);
     sem_post(&blocked_thread->next->sem);
@@ -201,6 +231,10 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 }
 
 void leave_batcher(batcher* batcher) {
+    printf("TRY TO LOCK\n");
+    pthread_mutex_lock(batcher->enter_lock);
+    printf("LOCKED\n");
+
     int remaining = batcher->remaining;
 
     if (remaining == 1) {
@@ -214,11 +248,19 @@ void leave_batcher(batcher* batcher) {
         */
         wake_up_threads(batcher);
         batcher->remaining--;
+
+        print_batcher(batcher);
+        printf("TRY TO UNLOCK\n");
+        pthread_mutex_unlock(batcher->enter_lock);
+        printf("UNLOCKED\n");
         return;
     }
     printf("Thread is leaving the batcher, remaining=%d \n\n", remaining);
     // Maybe use atomic operations of C
     batcher->remaining--;
+    printf("TRY TO UNLOCK\n");
+    pthread_mutex_unlock(batcher->enter_lock);
+    printf("UNLOCKED\n");
 }
 
 
