@@ -51,7 +51,7 @@ void print_memory(memory* mem) {
     printf("Number of segments: %d\n", mem->nb_segments);
     printf("Segment size: %d Bytes \n", mem->segment_size);
     printf("Data Total size: %d Bytes\n", mem->nb_segments * mem->segment_size);
-    printf("Lock: %p\n", &mem->lock);
+    printf("Lock: %p\n", &mem->alloc_lock);
 
     printf("Data: \n");
     if (mem->data == NULL) {
@@ -68,23 +68,6 @@ void print_memory(memory* mem) {
     printf("#####################\n\n");
 }
 
-memory* init_memory(void) {
-    memory* mem = (memory*) malloc(sizeof(memory));
-    mem->nb_segments = 0;
-    mem->segment_size = sizeof(dual_memory_segment);
-
-    mem->lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
-    if (pthread_mutex_init(mem->lock, NULL) != 0) {
-        fprintf(stderr, "Failed to initialize mutex for memory\n");
-        free(mem);
-        return NULL;
-    }
-
-    mem->data = NULL;
-
-    return mem;
-}
-
 /**
  * @brief Initializes a dual memory segment.
  *
@@ -94,7 +77,7 @@ memory* init_memory(void) {
  *
  * @return Returns the pointer to the newly created dual memory segment, or NULL if the allocation failed.
  */
-dual_memory_segment* init_dual_memory_segment() {
+dual_memory_segment* init_dual_memory_segment(u_int8_t init_value) {
     dual_memory_segment* dual_mem_seg_ptr = (dual_memory_segment*) malloc(sizeof(dual_memory_segment));
     if (dual_mem_seg_ptr == NULL) {
         fprintf(stderr, "Failed to allocate memory for dual memory segment\n");
@@ -102,17 +85,35 @@ dual_memory_segment* init_dual_memory_segment() {
     }
 
     dual_mem_seg_ptr->already_accessed = false;
-    dual_mem_seg_ptr->read_only = (uint8_t) rand();
-    dual_mem_seg_ptr->read_write = (uint8_t) rand();
+    dual_mem_seg_ptr->read_only = init_value;
+    dual_mem_seg_ptr->read_write = init_value;
     
     return dual_mem_seg_ptr;
+}
+
+memory* init_memory(void) {
+    memory* mem = (memory*) malloc(sizeof(memory));
+    mem->nb_segments = 1;
+    mem->segment_size = sizeof(dual_memory_segment);
+
+    mem->alloc_lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+    if (pthread_mutex_init(mem->alloc_lock, NULL) != 0) {
+        fprintf(stderr, "Failed to initialize mutex for memory\n");
+        free(mem);
+        return NULL;
+    }
+
+    // This is the first segment that is allocated by default, it should not be deallocated except by tm_destroy().
+    mem->data = init_dual_memory_segment(0);
+
+    return mem;
 }
 
 /**
  * @brief Adds a dual memory segment to the memory structure.
  *
- * This function adds a dual memory segment to the memory structure by allocating
- * and initializing the necessary resources. It ensures that the memory segment
+ * This function adds a dual memory segment to the memory structure by reallocating
+ * the necessary resources. It ensures that the data memory region (that should be initialize by tm_create())
  * is properly configured for subsequent operations.
  *
  * @param mem Pointer to the memory structure.
@@ -121,21 +122,17 @@ dual_memory_segment* init_dual_memory_segment() {
  */
 int add_dual_memory_segment_to_memory(memory* mem, dual_memory_segment dms) {
     if (mem == NULL) return -1;
+    // We assume that the allocation of the first segment is already dony by tm_create and should not be deallocated.
     int new_segment_index = mem->nb_segments;
+    if (mem->data == NULL || new_segment_index == 0) return -1;
+
     mem->nb_segments++;
+    mem->data = (dual_memory_segment*) realloc(mem->data, mem->segment_size * (mem->nb_segments));
     if (mem->data == NULL) {
-        mem->data = (dual_memory_segment*) malloc(mem->segment_size);
-        if (mem->data == NULL) {
-            fprintf(stderr, "Failed to allocate memory for dual memory segment\n");
-            return -1;
-        }
-    } else {
-        mem->data = (dual_memory_segment*) realloc(mem->data, mem->segment_size * (mem->nb_segments));
-        if (mem->data == NULL) {
-            fprintf(stderr, "Failed to reallocate memory for dual memory segment\n");
-            return -1;
-        }
+        fprintf(stderr, "Failed to reallocate memory for dual memory segment\n");
+        return -1;
     }
+
     mem->data[new_segment_index] = dms;
     return new_segment_index;
 
@@ -143,8 +140,8 @@ int add_dual_memory_segment_to_memory(memory* mem, dual_memory_segment dms) {
 
 void destroy_memory(memory* mem) {
     if (mem == NULL) return;
-    if (mem->lock != NULL) {
-        pthread_mutex_destroy(mem->lock);
+    if (mem->alloc_lock != NULL) {
+        pthread_mutex_destroy(mem->alloc_lock);
     } 
     //free(mem->data);
     mem->data = NULL;
@@ -162,26 +159,52 @@ void destroy_memory(memory* mem) {
  */
 int allocate_segment(memory* mem) {
     if (mem == NULL) return -1;
-    pthread_mutex_lock(mem->lock);
 
-    dual_memory_segment dms = *init_dual_memory_segment();
+    dual_memory_segment* dms_ptr = init_dual_memory_segment(0);
+    if (dms_ptr == NULL) {
+        printf("Failed to allocate memory for dual memory segment\n");
+        return -1;
+    }
+
+    dual_memory_segment dms = *dms_ptr;
+
+    pthread_mutex_lock(mem->alloc_lock);
     int new_index = add_dual_memory_segment_to_memory(mem, dms);
 
-    pthread_mutex_unlock(mem->lock);
+    pthread_mutex_unlock(mem->alloc_lock);
     return new_index;
 
 }
 
-void free_segment(memory* mem, int index) {
-    if (mem == NULL) return;
-    pthread_mutex_lock(mem->lock);
-
-    if (index < 0 || index >= mem->nb_segments) {
-        fprintf(stderr, "Index out of bounds\n");
-        pthread_mutex_unlock(mem->lock);
+/**
+ * FIXME : See if this implementation is correct.
+ * 
+ * @brief Deallocates a memory segment.
+ *
+ * This function is responsible for deallocating a previously allocated
+ * memory segment. It ensures that all resources associated with the 
+ * segment are properly released to avoid memory leaks.
+ *
+ * @param segment A pointer to the memory segment to be deallocated.
+ * @param index The index of the segment to be deallocated.
+ */
+void deallocate_segment(memory* mem, int index) {
+    if (mem == NULL) {
+        fprintf(stderr, "Memory structure is NULL\n");
         return;
     }
 
+    if (index == 0) {
+        fprintf(stderr, "Cannot deallocate the first segment. Only tm_create() and tm_destroy() can manage the allocation of this segment.\n");
+        return;
+    }
+
+    if (index < 1 || index >= mem->nb_segments) {
+        fprintf(stderr, "Index out of bounds\n");
+        return;
+    }
+
+    pthread_mutex_lock(mem->alloc_lock);
     mem->nb_segments--;
     for (int i = index; i < mem->nb_segments; i++) {
         mem->data[i] = mem->data[i+1];
@@ -189,7 +212,7 @@ void free_segment(memory* mem, int index) {
     mem->data = (dual_memory_segment*) realloc(mem->data, mem->segment_size * (mem->nb_segments));
 
 
-    pthread_mutex_unlock(mem->lock);
+    pthread_mutex_unlock(mem->alloc_lock);
 }
 
 /* BATCHER PART */
@@ -211,7 +234,7 @@ void print_batcher(batcher* b) {
         return;
     }
 
-    printf("Count: %d\n", b->count);
+    printf("Count: %d\n", b->epoch);
     printf("Remaining: %d\n", b->remaining);
 
     printf("Blocked threads HEAD: \n");
@@ -235,21 +258,21 @@ batcher* init_batcher(void) {
         return NULL;
     }
 
-    batcher_ptr->count = 0;
+    batcher_ptr->epoch = 0;
     batcher_ptr->remaining = 0;
     batcher_ptr->blocked_threads_head = NULL;
     batcher_ptr->blocked_threads_tail = NULL;
 
-    batcher_ptr->enter_lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
-    if (batcher_ptr->enter_lock == NULL) {
+    batcher_ptr->lock = (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+    if (batcher_ptr->lock == NULL) {
         fprintf(stderr, "Failed to allocate memory for mutex\n");
         free(batcher_ptr);
         return NULL;
     }
 
-    if (pthread_mutex_init(batcher_ptr->enter_lock, NULL) != 0) {
+    if (pthread_mutex_init(batcher_ptr->lock, NULL) != 0) {
         fprintf(stderr, "Failed to initialize mutex for batcher\n");
-        free(batcher_ptr->enter_lock);
+        free(batcher_ptr->lock);
         free(batcher_ptr);
         return NULL;
     }
@@ -268,9 +291,9 @@ void destroy_batcher(batcher* batcher) {
         current = next;
     }
 
-    if (batcher->enter_lock != NULL) {
-        pthread_mutex_destroy(batcher->enter_lock);
-        batcher->enter_lock = NULL;
+    if (batcher->lock != NULL) {
+        pthread_mutex_destroy(batcher->lock);
+        batcher->lock = NULL;
     }
 
     free(batcher);
@@ -284,14 +307,14 @@ void wake_up_threads(batcher* batcher) {
 void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 
 
-    pthread_mutex_lock(batcher->enter_lock);
+    pthread_mutex_lock(batcher->lock);
 
 
     if (batcher->remaining == 0) {
         // Maybe use atomic operations of C
         batcher->remaining++;
 
-        pthread_mutex_unlock(batcher->enter_lock);
+        pthread_mutex_unlock(batcher->lock);
         printf("🆕 | Thread %d\n\n", blocked_thread->id);
 
         //print_batcher(batcher);
@@ -308,7 +331,7 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
         blocked_thread->next = NULL;
     }
 
-    pthread_mutex_unlock(batcher->enter_lock);
+    pthread_mutex_unlock(batcher->lock);
 
     
     /* Make the current thread sleep using sem (sem_t) which is contained in blocked_thread, wake him up when sem tells the thread to wake up */
@@ -324,7 +347,7 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
     Solution 1: lock the mutex again and check if the next element is the current thread, if so, wake it up.
     */
     // Solution 1
-    pthread_mutex_lock(batcher->enter_lock);
+    pthread_mutex_lock(batcher->lock);
     batcher->remaining++;
 
     //print_batcher(batcher);
@@ -336,13 +359,13 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
         batcher->blocked_threads_head = NULL;
         blocked_thread = NULL;
 
-        pthread_mutex_unlock(batcher->enter_lock);
+        pthread_mutex_unlock(batcher->lock);
 
         return;
     }
 
     // Solution 1
-    pthread_mutex_unlock(batcher->enter_lock);
+    pthread_mutex_unlock(batcher->lock);
     
     sem_post(&blocked_thread->next->sem);
     blocked_thread = NULL;
@@ -350,7 +373,7 @@ void enter_batcher(batcher* batcher, blocked_thread* blocked_thread) {
 }
 
 void leave_batcher(batcher* batcher) {
-    pthread_mutex_lock(batcher->enter_lock);
+    pthread_mutex_lock(batcher->lock);
 
     int remaining = batcher->remaining;
 
@@ -363,12 +386,14 @@ void leave_batcher(batcher* batcher) {
         We would maybe want to use a lock to prevent a new process to enter the batcher and bypass the semaphore by seeing remaining == 0
         but it is not necessary since if a new process arrives at this moment, it will not be blocked and work with the other processes and also increment "remaining" by one as expected.
         */
-        wake_up_threads(batcher);
         batcher->remaining--;
+        batcher->epoch++;
+        print_batcher(batcher);
+        wake_up_threads(batcher);
 
         //print_batcher(batcher);
 
-        pthread_mutex_unlock(batcher->enter_lock);
+        pthread_mutex_unlock(batcher->lock);
 
         return;
     }
@@ -377,7 +402,7 @@ void leave_batcher(batcher* batcher) {
     // Maybe use atomic operations of C
     batcher->remaining--;
     //print_batcher(batcher);
-    pthread_mutex_unlock(batcher->enter_lock);
+    pthread_mutex_unlock(batcher->lock);
 }
 
 
@@ -389,8 +414,10 @@ void leave_batcher(batcher* batcher) {
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
 shared_t tm_create(size_t unused(size), size_t unused(align)) {
+    if (size <= 0 || align <= 0 || size > (1ULL << 48) || align % 2 != 0) return invalid_shared;
+    if (size % align != 0) return invalid_shared;
     
-    // TODO: tm_create(size_t, size_t)
+    // FIXME: Ask about the alignment of the memory with the structures already created.
     return invalid_shared;
 }
 

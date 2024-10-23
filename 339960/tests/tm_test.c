@@ -80,20 +80,26 @@ void memory_test(void) {
 
     // Memory Allocation
     printf("Allocating 4 segments\n");
-    int new_index = allocate_segment(mem);
+    int new_index1 = allocate_segment(mem);
     int new_index2 = allocate_segment(mem);
     int new_index3 = allocate_segment(mem);
     int new_index4 = allocate_segment(mem);
     print_memory(mem);
 
     // Memory Deallocation 1
-    printf("Freeing segment %d\n", new_index);
-    free_segment(mem, new_index);
+    printf("Freeing segment %d\n", new_index3);
+    deallocate_segment(mem, new_index3);
     print_memory(mem);
 
     // Memory Deallocation 2
-    printf("Freeing segment %d\n", new_index2);
-    free_segment(mem, new_index2);
+    printf("Freeing segment %d\n", new_index1);
+    deallocate_segment(mem, new_index1);
+    print_memory(mem);
+
+    // Memory Deallocation Failure Test
+    printf("Freeing segment 0, Should not work\n");
+    fflush(stdout);
+    deallocate_segment(mem, 0);
     print_memory(mem);
 
     destroy_memory(mem);
